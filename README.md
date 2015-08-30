@@ -1,4 +1,5 @@
 This patch makes LuaJIT build with stubbed FFI, allowing it to work on Vita
+
 to build, apply the patch to a luajit tarball using
 ```
 patch -p1 < luajit.patch
