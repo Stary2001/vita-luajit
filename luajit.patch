@@ -1,0 +1,180 @@
+diff -ruN LuaJIT-2.0.4/Makefile LuaJIT-2.0.4-vita/Makefile
+--- LuaJIT-2.0.4/Makefile	2015-05-14 19:30:00.000000000 +0100
++++ LuaJIT-2.0.4-vita/Makefile	2015-08-30 02:54:46.359921299 +0100
+@@ -24,7 +24,7 @@
+ # Change the installation path as needed. This automatically adjusts
+ # the paths in src/luaconf.h, too. Note: PREFIX must be an absolute path!
+ #
+-export PREFIX= /usr/local
++export PREFIX=/home/stary2001/vita-toolchain/arm-vita-eabi/
+ export MULTILIB= lib
+ ##############################################################################
+ 
+@@ -34,13 +34,13 @@
+ INSTALL_SHARE= $(DPREFIX)/share
+ INSTALL_INC=   $(DPREFIX)/include/luajit-$(MAJVER).$(MINVER)
+ 
+-INSTALL_LJLIBD= $(INSTALL_SHARE)/luajit-$(VERSION)
+-INSTALL_JITLIB= $(INSTALL_LJLIBD)/jit
+-INSTALL_LMODD= $(INSTALL_SHARE)/lua
+-INSTALL_LMOD= $(INSTALL_LMODD)/$(ABIVER)
+-INSTALL_CMODD= $(INSTALL_LIB)/lua
+-INSTALL_CMOD= $(INSTALL_CMODD)/$(ABIVER)
+-INSTALL_MAN= $(INSTALL_SHARE)/man/man1
++# INSTALL_LJLIBD= $(INSTALL_SHARE)/luajit-$(VERSION)
++# INSTALL_JITLIB= $(INSTALL_LJLIBD)/jit
++# INSTALL_LMODD= $(INSTALL_SHARE)/lua
++# INSTALL_LMOD= $(INSTALL_LMODD)/$(ABIVER)
++# INSTALL_CMODD= $(INSTALL_LIB)/lua
++# INSTALL_CMOD= $(INSTALL_CMODD)/$(ABIVER)
++# INSTALL_MAN= $(INSTALL_SHARE)/man/man1
+ INSTALL_PKGCONFIG= $(INSTALL_LIB)/pkgconfig
+ 
+ INSTALL_TNAME= luajit-$(VERSION)
+@@ -82,7 +82,7 @@
+ FILE_SO= libluajit.so
+ FILE_MAN= luajit.1
+ FILE_PC= luajit.pc
+-FILES_INC= lua.h lualib.h lauxlib.h luaconf.h lua.hpp luajit.h
++FILES_INC= lua.h lualib.h lauxlib.h luaconf.h lua.hpp luajit.h stub_ffi.h
+ FILES_JITLIB= bc.lua v.lua dump.lua dis_x86.lua dis_x64.lua dis_arm.lua \
+ 	      dis_ppc.lua dis_mips.lua dis_mipsel.lua bcsave.lua vmdef.lua
+ 
+@@ -115,12 +115,12 @@
+ 	  $(LDCONFIG) $(INSTALL_LIB) && \
+ 	  $(SYMLINK) $(INSTALL_SONAME) $(INSTALL_SHORT1) && \
+ 	  $(SYMLINK) $(INSTALL_SONAME) $(INSTALL_SHORT2) || :
+-	cd etc && $(INSTALL_F) $(FILE_MAN) $(INSTALL_MAN)
++#	cd etc && $(INSTALL_F) $(FILE_MAN) $(INSTALL_MAN)
+ 	cd etc && $(SED_PC) $(FILE_PC) > $(FILE_PC).tmp && \
+ 	  $(INSTALL_F) $(FILE_PC).tmp $(INSTALL_PC) && \
+ 	  $(RM) $(FILE_PC).tmp
+ 	cd src && $(INSTALL_F) $(FILES_INC) $(INSTALL_INC)
+-	cd src/jit && $(INSTALL_F) $(FILES_JITLIB) $(INSTALL_JITLIB)
++#	cd src/jit && $(INSTALL_F) $(FILES_JITLIB) $(INSTALL_JITLIB)
+ 	$(SYMLINK) $(INSTALL_TNAME) $(INSTALL_TSYM)
+ 	@echo "==== Successfully installed LuaJIT $(VERSION) to $(PREFIX) ===="
+ 
+diff -ruN LuaJIT-2.0.4/src/lib_os.c LuaJIT-2.0.4-vita/src/lib_os.c
+--- LuaJIT-2.0.4/src/lib_os.c	2015-05-14 19:30:00.000000000 +0100
++++ LuaJIT-2.0.4-vita/src/lib_os.c	2015-08-30 03:00:42.276597649 +0100
+@@ -66,9 +66,10 @@
+ 
+ LJLIB_CF(os_rename)
+ {
+-  const char *fromname = luaL_checkstring(L, 1);
++  /*const char *fromname = luaL_checkstring(L, 1);
+   const char *toname = luaL_checkstring(L, 2);
+-  return luaL_fileresult(L, rename(fromname, toname) == 0, fromname);
++  return luaL_fileresult(L, rename(fromname, toname) == 0, fromname);*/
++  return 0;
+ }
+ 
+ LJLIB_CF(os_tmpname)
+@@ -121,7 +122,9 @@
+ 
+ LJLIB_CF(os_clock)
+ {
+-  setnumV(L->top++, ((lua_Number)clock())*(1.0/(lua_Number)CLOCKS_PER_SEC));
++  // _times_r is unimplemented
++  // setnumV(L->top++, ((lua_Number)clock())*(1.0/(lua_Number)CLOCKS_PER_SEC));
++  setnumV(L->top++, 0);
+   return 1;
+ }
+ 
+diff -ruN LuaJIT-2.0.4/src/lj_clib.c LuaJIT-2.0.4-vita/src/lj_clib.c
+--- LuaJIT-2.0.4/src/lj_clib.c	2015-05-14 19:30:00.000000000 +0100
++++ LuaJIT-2.0.4-vita/src/lj_clib.c	2015-08-30 02:01:38.203167893 +0100
+@@ -16,6 +16,7 @@
+ #include "lj_cconv.h"
+ #include "lj_cdata.h"
+ #include "lj_clib.h"
++#include <stub_ffi.h>
+ 
+ /* -- OS-specific functions ----------------------------------------------- */
+ 
+@@ -256,6 +257,67 @@
+   return p;
+ }
+ 
++#elif LJ_FFI_STUB
++
++#define CLIB_DEFHANDLE ((void*)-1)
++
++FunctionTable *tables_head;
++FunctionTable *tables_tail;
++
++void ffi_add_table(FunctionTable *f)
++{
++	if(tables_head != NULL)
++	{
++		tables_tail->next = f;
++		tables_tail = f;
++		f->next = NULL;
++	}
++	else
++	{
++		tables_head = tables_tail = f;
++		f->next = NULL;
++	}
++}
++
++LJ_NORET LJ_NOINLINE static void clib_error(lua_State *L, const char *fmt,
++                                            const char *name)
++{
++  lj_err_callermsg(L, lj_str_pushf(L, fmt, name, "this should never be called"));
++}
++
++static void *clib_loadlib(lua_State *L, const char *name, int global)
++{ 
++  UNUSED(name); UNUSED(global);
++  return NULL;
++}
++
++static void clib_unloadlib(CLibrary *cl)
++{
++  UNUSED(cl);
++}
++
++static void *clib_getsym(CLibrary *cl, const char *name)
++{
++  FunctionTable *t = tables_head;
++  if(t == NULL) return NULL;
++
++  while(t != NULL)
++  {
++    int i = 0;
++    while(t->funcs[i].name != NULL && t->funcs[i].ptr != NULL)
++    {
++      if(strcmp(name, t->funcs[i].name) == 0)
++      {
++        return t->funcs[i].ptr;
++      }
++      i++;
++    }
++    t = t->next;
++  }
++
++  return NULL;
++}
++
+ #else
+ 
+ #define CLIB_DEFHANDLE	NULL
+diff -ruN LuaJIT-2.0.4/src/stub_ffi.h LuaJIT-2.0.4-vita/src/stub_ffi.h
+--- LuaJIT-2.0.4/src/stub_ffi.h	1970-01-01 01:00:00.000000000 +0100
++++ LuaJIT-2.0.4-vita/src/stub_ffi.h	2015-08-30 02:27:35.826543603 +0100
+@@ -0,0 +1,13 @@
++typedef struct Function
++{
++        const char *name;
++        void *ptr;
++} Function;
++
++typedef struct FunctionTable
++{
++	Function *funcs;
++	struct FunctionTable *next;
++} FunctionTable;
++
++void ffi_add_table(FunctionTable *f);
