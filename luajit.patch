@@ -89,7 +89,7 @@ diff -ruN LuaJIT-2.0.4/src/lj_clib.c LuaJIT-2.0.4-vita/src/lj_clib.c
  #include "lj_cconv.h"
  #include "lj_cdata.h"
  #include "lj_clib.h"
-+#include <stub_ffi.h>
++#include "stub_ffi.h"
  
  /* -- OS-specific functions ----------------------------------------------- */
  
