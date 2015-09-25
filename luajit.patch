@@ -1,6 +1,6 @@
 diff -ruN LuaJIT-2.0.4/Makefile LuaJIT-2.0.4-vita/Makefile
 --- LuaJIT-2.0.4/Makefile	2015-05-14 19:30:00.000000000 +0100
-+++ LuaJIT-2.0.4-vita/Makefile	2015-08-30 02:54:46.359921299 +0100
++++ LuaJIT-2.0.4-vita/Makefile	2015-08-30 03:33:05.449983850 +0100
 @@ -24,7 +24,7 @@
  # Change the installation path as needed. This automatically adjusts
  # the paths in src/luaconf.h, too. Note: PREFIX must be an absolute path!
@@ -31,7 +31,21 @@ diff -ruN LuaJIT-2.0.4/Makefile LuaJIT-2.0.4-vita/Makefile
  INSTALL_PKGCONFIG= $(INSTALL_LIB)/pkgconfig
  
  INSTALL_TNAME= luajit-$(VERSION)
-@@ -82,7 +82,7 @@
+@@ -61,10 +61,9 @@
+ INSTALL_TSYM= $(INSTALL_BIN)/$(INSTALL_TSYMNAME)
+ INSTALL_PC= $(INSTALL_PKGCONFIG)/$(INSTALL_PCNAME)
+ 
+-INSTALL_DIRS= $(INSTALL_BIN) $(INSTALL_LIB) $(INSTALL_INC) $(INSTALL_MAN) \
+-  $(INSTALL_PKGCONFIG) $(INSTALL_JITLIB) $(INSTALL_LMOD) $(INSTALL_CMOD)
+-UNINSTALL_DIRS= $(INSTALL_JITLIB) $(INSTALL_LJLIBD) $(INSTALL_INC) \
+-  $(INSTALL_LMOD) $(INSTALL_LMODD) $(INSTALL_CMOD) $(INSTALL_CMODD)
++INSTALL_DIRS= $(INSTALL_BIN) $(INSTALL_LIB) $(INSTALL_INC) \
++  $(INSTALL_PKGCONFIG)
++UNINSTALL_DIRS= $(INSTALL_INC)
+ 
+ RM= rm -f
+ MKDIR= mkdir -p
+@@ -82,7 +81,7 @@
  FILE_SO= libluajit.so
  FILE_MAN= luajit.1
  FILE_PC= luajit.pc
@@ -40,7 +54,17 @@ diff -ruN LuaJIT-2.0.4/Makefile LuaJIT-2.0.4-vita/Makefile
  FILES_JITLIB= bc.lua v.lua dump.lua dis_x86.lua dis_x64.lua dis_arm.lua \
  	      dis_ppc.lua dis_mips.lua dis_mipsel.lua bcsave.lua vmdef.lua
  
-@@ -115,12 +115,12 @@
+@@ -107,21 +106,21 @@
+ install: $(INSTALL_DEP)
+ 	@echo "==== Installing LuaJIT $(VERSION) to $(PREFIX) ===="
+ 	$(MKDIR) $(INSTALL_DIRS)
+-	cd src && $(INSTALL_X) $(FILE_T) $(INSTALL_T)
++#	cd src && $(INSTALL_X) $(FILE_T) $(INSTALL_T)
+ 	cd src && test -f $(FILE_A) && $(INSTALL_F) $(FILE_A) $(INSTALL_STATIC) || :
+-	$(RM) $(INSTALL_TSYM) $(INSTALL_DYN) $(INSTALL_SHORT1) $(INSTALL_SHORT2)
++	$(RM) $(INSTALL_DYN) $(INSTALL_SHORT1) $(INSTALL_SHORT2)
+ 	cd src && test -f $(FILE_SO) && \
+ 	  $(INSTALL_X) $(FILE_SO) $(INSTALL_DYN) && \
  	  $(LDCONFIG) $(INSTALL_LIB) && \
  	  $(SYMLINK) $(INSTALL_SONAME) $(INSTALL_SHORT1) && \
  	  $(SYMLINK) $(INSTALL_SONAME) $(INSTALL_SHORT2) || :
@@ -51,40 +75,16 @@ diff -ruN LuaJIT-2.0.4/Makefile LuaJIT-2.0.4-vita/Makefile
  	  $(RM) $(FILE_PC).tmp
  	cd src && $(INSTALL_F) $(FILES_INC) $(INSTALL_INC)
 -	cd src/jit && $(INSTALL_F) $(FILES_JITLIB) $(INSTALL_JITLIB)
+-	$(SYMLINK) $(INSTALL_TNAME) $(INSTALL_TSYM)
 +#	cd src/jit && $(INSTALL_F) $(FILES_JITLIB) $(INSTALL_JITLIB)
- 	$(SYMLINK) $(INSTALL_TNAME) $(INSTALL_TSYM)
++#	$(SYMLINK) $(INSTALL_TNAME) $(INSTALL_TSYM)
  	@echo "==== Successfully installed LuaJIT $(VERSION) to $(PREFIX) ===="
  
-diff -ruN LuaJIT-2.0.4/src/lib_os.c LuaJIT-2.0.4-vita/src/lib_os.c
---- LuaJIT-2.0.4/src/lib_os.c	2015-05-14 19:30:00.000000000 +0100
-+++ LuaJIT-2.0.4-vita/src/lib_os.c	2015-08-30 03:00:42.276597649 +0100
-@@ -66,9 +66,10 @@
- 
- LJLIB_CF(os_rename)
- {
--  const char *fromname = luaL_checkstring(L, 1);
-+  /*const char *fromname = luaL_checkstring(L, 1);
-   const char *toname = luaL_checkstring(L, 2);
--  return luaL_fileresult(L, rename(fromname, toname) == 0, fromname);
-+  return luaL_fileresult(L, rename(fromname, toname) == 0, fromname);*/
-+  return 0;
- }
- 
- LJLIB_CF(os_tmpname)
-@@ -121,7 +122,9 @@
- 
- LJLIB_CF(os_clock)
- {
--  setnumV(L->top++, ((lua_Number)clock())*(1.0/(lua_Number)CLOCKS_PER_SEC));
-+  // _times_r is unimplemented
-+  // setnumV(L->top++, ((lua_Number)clock())*(1.0/(lua_Number)CLOCKS_PER_SEC));
-+  setnumV(L->top++, 0);
-   return 1;
- }
+ uninstall:
  
 diff -ruN LuaJIT-2.0.4/src/lj_clib.c LuaJIT-2.0.4-vita/src/lj_clib.c
 --- LuaJIT-2.0.4/src/lj_clib.c	2015-05-14 19:30:00.000000000 +0100
-+++ LuaJIT-2.0.4-vita/src/lj_clib.c	2015-08-30 02:01:38.203167893 +0100
++++ LuaJIT-2.0.4-vita/src/lj_clib.c	2015-08-30 03:28:54.079977011 +0100
 @@ -16,6 +16,7 @@
  #include "lj_cconv.h"
  #include "lj_cdata.h"
@@ -163,7 +163,7 @@ diff -ruN LuaJIT-2.0.4/src/lj_clib.c LuaJIT-2.0.4-vita/src/lj_clib.c
  #define CLIB_DEFHANDLE	NULL
 diff -ruN LuaJIT-2.0.4/src/stub_ffi.h LuaJIT-2.0.4-vita/src/stub_ffi.h
 --- LuaJIT-2.0.4/src/stub_ffi.h	1970-01-01 01:00:00.000000000 +0100
-+++ LuaJIT-2.0.4-vita/src/stub_ffi.h	2015-08-30 02:27:35.826543603 +0100
++++ LuaJIT-2.0.4-vita/src/stub_ffi.h	2015-08-30 03:28:54.079977011 +0100
 @@ -0,0 +1,13 @@
 +typedef struct Function
 +{
