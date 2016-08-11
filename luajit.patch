@@ -1,6 +1,6 @@
-diff -ruN LuaJIT-2.0.4/Makefile LuaJIT-2.0.4-vita/Makefile
+diff -Naur LuaJIT-2.0.4/Makefile LuaJIT-2.0.4-vita/Makefile
 --- LuaJIT-2.0.4/Makefile	2015-05-14 19:30:00.000000000 +0100
-+++ LuaJIT-2.0.4-vita/Makefile	2015-08-30 03:33:05.449983850 +0100
++++ LuaJIT-2.0.4-vita/Makefile	2016-08-06 20:50:19.813410904 +0100
 @@ -24,7 +24,7 @@
  # Change the installation path as needed. This automatically adjusts
  # the paths in src/luaconf.h, too. Note: PREFIX must be an absolute path!
@@ -81,10 +81,24 @@ diff -ruN LuaJIT-2.0.4/Makefile LuaJIT-2.0.4-vita/Makefile
  	@echo "==== Successfully installed LuaJIT $(VERSION) to $(PREFIX) ===="
  
  uninstall:
+diff -Naur LuaJIT-2.0.4/src/lj_arch.h LuaJIT-2.0.4-vita/src/lj_arch.h
+--- LuaJIT-2.0.4/src/lj_arch.h	2015-05-14 19:30:00.000000000 +0100
++++ LuaJIT-2.0.4-vita/src/lj_arch.h	2016-08-06 20:54:41.576732930 +0100
+@@ -117,6 +117,11 @@
+ #define LJ_TARGET_CONSOLE	1
+ #endif
  
-diff -ruN LuaJIT-2.0.4/src/lj_clib.c LuaJIT-2.0.4-vita/src/lj_clib.c
++#ifdef __vita__
++#define LJ_TARGET_PSVITA	1
++#define LJ_TARGET_CONSOLE	1
++#endif
++
+ #if _XBOX_VER >= 200
+ #define LJ_TARGET_XBOX360	1
+ #define LJ_TARGET_CONSOLE	1
+diff -Naur LuaJIT-2.0.4/src/lj_clib.c LuaJIT-2.0.4-vita/src/lj_clib.c
 --- LuaJIT-2.0.4/src/lj_clib.c	2015-05-14 19:30:00.000000000 +0100
-+++ LuaJIT-2.0.4-vita/src/lj_clib.c	2015-08-30 03:28:54.079977011 +0100
++++ LuaJIT-2.0.4-vita/src/lj_clib.c	2016-08-06 20:50:19.813410904 +0100
 @@ -16,6 +16,7 @@
  #include "lj_cconv.h"
  #include "lj_cdata.h"
@@ -161,9 +175,109 @@ diff -ruN LuaJIT-2.0.4/src/lj_clib.c LuaJIT-2.0.4-vita/src/lj_clib.c
  #else
  
  #define CLIB_DEFHANDLE	NULL
-diff -ruN LuaJIT-2.0.4/src/stub_ffi.h LuaJIT-2.0.4-vita/src/stub_ffi.h
+diff -Naur LuaJIT-2.0.4/src/lj_mcode.c LuaJIT-2.0.4-vita/src/lj_mcode.c
+--- LuaJIT-2.0.4/src/lj_mcode.c	2015-05-14 19:30:00.000000000 +0100
++++ LuaJIT-2.0.4-vita/src/lj_mcode.c	2016-08-06 21:44:14.593271170 +0100
+@@ -32,6 +32,10 @@
+ void sys_icache_invalidate(void *start, size_t len);
+ #endif
+ 
++#if LJ_TARGET_PSVITA
++#include <psp2/kernel/sysmem.h>
++#endif
++
+ /* Synchronize data/instruction cache. */
+ void lj_mcode_sync(void *start, void *end)
+ {
+@@ -44,6 +48,13 @@
+   sys_icache_invalidate(start, (char *)end-(char *)start);
+ #elif LJ_TARGET_PPC
+   lj_vm_cachesync(start, end);
++#elif LJ_TARGET_PSVITA
++  SceUID block = sceKernelFindMemBlockByAddr(start, (char *)end-(char *)start);
++  if(block < 0)
++  {
++    return;
++  }
++  sceKernelSyncVMDomain(block, start, (char *)end-(char *)start);
+ #elif defined(__GNUC__)
+   __clear_cache(start, end);
+ #else
+@@ -118,12 +129,70 @@
+   return mprotect(p, sz, prot);
+ }
+ 
++#elif LJ_TARGET_PSVITA
++
++#define MCPROT_RW   0
++#define MCPROT_RX   1
++#define MCPROT_RWX  2
++
++static void *mcode_alloc_at(jit_State *J, uintptr_t hint, size_t sz, int prot)
++{
++    (void)hint;
++	(void)prot;
++
++    void *base;
++    SceUID block = sceKernelAllocMemBlockForVM("code", sz);
++	if(block < 0)
++	{
++		lj_trace_err(J, LJ_TRERR_MCODEAL);
++		return NULL;
++	}
++
++    if(sceKernelGetMemBlockBase(block, &base) < 0)
++	{
++		lj_trace_err(J, LJ_TRERR_MCODEAL);
++		return NULL;
++	}
++
++    return base;
++}
++
++static void mcode_free(jit_State *J, void *p, size_t sz)
++{
++	SceUID block = sceKernelFindMemBlockByAddr(p, sz);
++	if(block < 0)
++	{
++		return;
++	}
++	sceKernelFreeMemBlock(block);
++}
++
++
++static int mcode_setprot(void *p, size_t sz, int prot)
++{
++	(void)p;
++	(void)sz;
++	if(prot == MCPROT_RW)
++	{
++		sceKernelOpenVMDomain();
++	}
++	else if(prot == MCPROT_RX)
++	{
++		sceKernelCloseVMDomain();
++	}
++	else
++	{
++		return -1;
++	}
++	return 0;
++}
++
++
+ #elif LJ_64
+ 
+ #error "Missing OS support for explicit placement of executable memory"
+ 
+ #else
+-
+ /* Fallback allocator. This will fail if memory is not executable by default. */
+ #define LUAJIT_UNPROTECT_MCODE
+ #define MCPROT_RW	0
+diff -Naur LuaJIT-2.0.4/src/stub_ffi.h LuaJIT-2.0.4-vita/src/stub_ffi.h
 --- LuaJIT-2.0.4/src/stub_ffi.h	1970-01-01 01:00:00.000000000 +0100
-+++ LuaJIT-2.0.4-vita/src/stub_ffi.h	2015-08-30 03:28:54.079977011 +0100
++++ LuaJIT-2.0.4-vita/src/stub_ffi.h	2016-08-06 20:50:19.813410904 +0100
 @@ -0,0 +1,13 @@
 +typedef struct Function
 +{
